@@ -3,6 +3,10 @@ import pandas as pd
 import google.generativeai as genai
 import io # Para manejar archivos en memoria
 
+# --- Configuración de Autenticación ---
+CORRECT_USERNAME = "javi"
+CORRECT_PASSWORD = "javi"
+
 # Configuración de la API de Gemini
 # La clave API se inyectará en tiempo de ejecución en el entorno de Canvas.
 # Si ejecutas esto localmente, necesitarás establecer la variable de entorno
@@ -91,6 +95,8 @@ if "excel_data" not in st.session_state:
     st.session_state.excel_data = None
 if "google_sheet_url" not in st.session_state:
     st.session_state.google_sheet_url = None
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
 
 # --- Funciones de procesamiento de datos ---
 
@@ -167,8 +173,24 @@ def get_ai_response(user_message):
         st.error(f"Error al obtener respuesta de la IA: {e}")
         return "Hubo un error al conectar con la IA. Por favor, inténtalo de nuevo."
 
-# --- Diseño de la aplicación Streamlit ---
+# --- Lógica de Autenticación ---
+if not st.session_state.logged_in:
+    st.title("Acceso al Gerente General IA")
+    st.markdown("---")
 
+    username = st.text_input("Usuario", key="login_username")
+    password = st.text_input("Contraseña", type="password", key="login_password")
+
+    if st.button("Iniciar Sesión", key="login_button"):
+        if username == CORRECT_USERNAME and password == CORRECT_PASSWORD:
+            st.session_state.logged_in = True
+            st.success("¡Sesión iniciada correctamente!")
+            st.rerun() # Forzar un re-render para mostrar la aplicación principal
+        else:
+            st.error("Usuario o contraseña incorrectos.")
+    st.stop() # Detiene la ejecución si no está logueado
+
+# --- Diseño de la aplicación Streamlit (solo si está logueado) ---
 st.title("🤖 Gerente General IA") # Título principal actualizado
 
 # Sección de Carga de Datos en un expander
