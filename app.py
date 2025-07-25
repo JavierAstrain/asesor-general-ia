@@ -3,10 +3,10 @@ import pandas as pd
 import google.generativeai as genai
 import io # Para manejar archivos en memoria
 import json # Para manejar la salida de las funciones
-import sys # Para depuración
-import os # Para depuración
+import sys # Para depuración: sys.path
+import os # Para depuración: os.getcwd()
 
-# --- Diagnóstico de la versión de google-generativeai ---
+# --- Diagnóstico de la versión de google-generativeai y entorno ---
 try:
     import pkg_resources
     genai_version = pkg_resources.get_distribution("google-generativeai").version
@@ -15,6 +15,13 @@ try:
         st.sidebar.warning("¡Advertencia! La versión de google-generativeai es anterior a 0.6.0. Por favor, actualiza tu entorno.")
 except Exception as e:
     st.sidebar.error(f"No se pudo verificar la versión de google-generativeai: {e}")
+
+st.sidebar.subheader("Información de Entorno")
+st.sidebar.write(f"Directorio de trabajo actual: `{os.getcwd()}`")
+st.sidebar.write("Rutas de búsqueda de módulos (sys.path):")
+for path in sys.path:
+    st.sidebar.write(f"- `{path}`")
+
 
 # --- Configuración de Autenticación ---
 CORRECT_USERNAME = "javi"
@@ -242,91 +249,6 @@ def consultar_datos_tabla(
     except Exception as e:
         return json.dumps({"error": f"Error al ejecutar la consulta: {e}"})
 
-
-# --- Interacción con la IA ---
-
-def get_ai_response(user_message):
-    """Envía el mensaje del usuario y el contexto de datos a Gemini y obtiene una respuesta."""
-    # La clave API ya se verifica al inicio de la aplicación
-    
-    # Prepara el historial para Gemini, incluyendo el contexto de la planilla
-    gemini_chat_history = []
-    
-    # Añadir contexto de datos si está disponible
-    data_context = ""
-    if st.session_state.excel_data is not None:
-        buffer = io.StringIO()
-        st.session_state.excel_data.info(buf=buffer, verbose=True)
-        data_info = buffer.getvalue()
-
-        data_context += "\n\nEl usuario ha cargado una planilla Excel. Aquí tienes un resumen de su estructura y una muestra de sus datos:\n"
-        data_context += "--- Información de la Planilla (Columnas y Tipos de Datos) ---\n"
-        data_context += data_info
-        data_context += "\n--- Primeras 5 filas ---\n"
-        data_context += st.session_state.excel_data.head().to_markdown(index=False)
-        data_context += "\n--- Últimas 5 filas ---\n"
-        data_context += st.session_state.excel_data.tail().to_markdown(index=False)
-        data_context += "\n\n"
-        data_context += "Soy un Gerente General IA. Mi objetivo es ayudarte a consultar información, hacer cálculos y dar recomendaciones sobre tu negocio, basándome en esta planilla. "
-        data_context += "Tengo acceso a una herramienta llamada `consultar_datos_tabla` que me permite realizar operaciones sobre la planilla completa. "
-        data_context += "Cuando me pidas un cálculo o una consulta de datos, intentaré usar esta herramienta y te daré la respuesta directamente. "
-        data_context += "Si no puedo realizar la operación con la herramienta, te lo indicaré. "
-        data_context += "También puedo responder preguntas conceptuales y dar recomendaciones estratégicas basadas en la estructura de tus datos y en mi conocimiento general de negocio (finanzas, marketing, operaciones, RRHH, etc.).\n"
-        data_context += "Por favor, sé específico en tus preguntas sobre los datos."
-
-    if st.session_state.google_sheet_url is not None:
-        data_context += f"\n\nEl usuario ha vinculado la siguiente URL de Google Sheet: {st.session_state.google_sheet_url}. "
-        data_context += "Considera que esta es una fuente de datos adicional, pero las herramientas solo operan sobre la planilla Excel actualmente."
-
-    # Añadir el contexto de datos como un mensaje del sistema al inicio del chat
-    if data_context:
-        gemini_chat_history.append({"role": "user", "parts": [{"text": data_context}]})
-        gemini_chat_history.append({"role": "model", "parts": [{"text": "Entendido. Estoy listo para ayudarte con tus datos."}]}) # Confirmación de la IA
-
-    # Añadir el historial de chat existente (limitado)
-    recent_history = st.session_state.chat_history[-10:] # Limitar para evitar exceder el límite de tokens
-    for msg in recent_history:
-        if msg["role"] == "user":
-            gemini_chat_history.append({"role": "user", "parts": [{"text": msg["content"]}]})
-        elif msg["role"] == "ai":
-            gemini_chat_history.append({"role": "model", "parts": [{"text": msg["content"]}]})
-
-    # Iniciar el chat con el historial y las herramientas
-    chat = model.start_chat(history=gemini_chat_history, tools=[consultar_datos_tabla])
-    
-    try:
-        # Enviar el mensaje del usuario
-        response = chat.send_message(user_message)
-
-        # Verificar si el modelo ha llamado a una función
-        if response.candidates and response.candidates[0].function_calls:
-            function_call = response.candidates[0].function_calls[0]
-            function_name = function_call.name
-            function_args = {k: v for k, v in function_call.args.items()} # Convertir a dict
-            
-            st.info(f"Gerente General IA está ejecutando una función: {function_name} con argumentos {function_args}")
-
-            # Ejecutar la función Python correspondiente
-            if function_name == "consultar_datos_tabla":
-                tool_output = consultar_datos_tabla(**function_args)
-                
-                # Enviar el resultado de la función de vuelta al modelo
-                response_after_tool = chat.send_message(
-                    genai.types.ToolOutput(tool_code=tool_output) # Usar ToolOutput
-                )
-                return response_after_tool.text
-            else:
-                return "La IA intentó usar una función desconocida."
-        elif response.text:
-            return response.text
-        else:
-            return "Lo siento, la IA no pudo generar una respuesta significativa."
-    except genai.types.BlockedPromptException as e:
-        st.error(f"Error de seguridad: La consulta fue bloqueada por las políticas de seguridad de la IA. Por favor, reformula tu pregunta. Detalles: {e}")
-        return "Lo siento, tu consulta fue bloqueada por razones de seguridad. Por favor, intenta con una pregunta diferente."
-    except Exception as e:
-        st.error(f"Error al obtener respuesta de la IA: {e}")
-        return "Hubo un error al conectar con la IA o al procesar la consulta. Por favor, inténtalo de nuevo."
 
 # --- Lógica de Autenticación ---
 if not st.session_state.logged_in:
