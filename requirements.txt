@@ -2,3 +2,4 @@ streamlit
 pandas
 openpyxl
 google-generativeai
+tabulate # Añadido para la función .to_markdown() de pandas
