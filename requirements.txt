@@ -1,5 +1,7 @@
 streamlit
 pandas
 openpyxl
-google-generativeai==0.6.0 # Aseguramos esta versión específica
+google-generativeai==0.6.0
 tabulate
+setuptools # Añadido para asegurar pkg_resources
+
