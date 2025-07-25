@@ -24,8 +24,8 @@ model = genai.GenerativeModel('gemini-2.0-flash')
 
 # --- Configuración de Streamlit ---
 st.set_page_config(
-    page_title="Asesor Financiero con IA",
-    page_icon="💰",
+    page_title="Gerente General IA", # Título actualizado
+    page_icon="🤖", # Icono actualizado para reflejar un bot más general
     layout="wide"
 )
 
@@ -169,10 +169,10 @@ def get_ai_response(user_message):
 
 # --- Diseño de la aplicación Streamlit ---
 
-st.title("💰 Asesor Financiero con IA")
+st.title("🤖 Gerente General IA") # Título principal actualizado
 
 # Sección de Carga de Datos en un expander
-with st.expander("Cargar Datos Financieros"):
+with st.expander("Cargar Datos para el Gerente General IA"): # Texto del expander actualizado
     st.subheader("Archivo Excel (.xlsx, .xls)")
     uploaded_file = st.file_uploader("Sube tu archivo Excel", type=["xlsx", "xls"], key="excel_uploader")
     if uploaded_file is not None:
@@ -204,9 +204,9 @@ with chat_placeholder:
     if not st.session_state.chat_history:
         st.markdown("""
             <div class="chat-message-system">
-                ¡Hola! Soy tu Asesor Financiero AI. ¿En qué puedo ayudarte hoy con tus finanzas?
+                ¡Hola! Soy tu Gerente General IA. ¿En qué puedo ayudarte hoy?
                 <br/>
-                Puedes empezar preguntando sobre inversiones, presupuestos o cargando tus datos en la sección superior.
+                Puedes preguntarme sobre finanzas, marketing, operaciones, recursos humanos y más, basándome en los datos que cargues.
             </div>
         """, unsafe_allow_html=True)
 
