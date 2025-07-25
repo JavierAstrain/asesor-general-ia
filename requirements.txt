@@ -1,5 +1,6 @@
 streamlit
 pandas
 openpyxl
-google-generativeai
-tabulate # Añadido para la función .to_markdown() de pandas
+google-generativeai==0.6.0 # Aseguramos esta versión específica
+tabulate
+
