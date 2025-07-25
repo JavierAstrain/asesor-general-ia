@@ -7,7 +7,16 @@ import io # Para manejar archivos en memoria
 # La clave API se inyectará en tiempo de ejecución en el entorno de Canvas.
 # Si ejecutas esto localmente, necesitarás establecer la variable de entorno
 # GOOGLE_API_KEY o reemplazar "" con tu clave API.
-API_KEY = "" # Reemplaza con tu clave API si no estás en Canvas
+# Ahora se lee desde st.secrets, que puede ser configurado localmente en .streamlit/secrets.toml
+# o en el panel de control de Streamlit Cloud.
+try:
+    API_KEY = st.secrets["GOOGLE_API_KEY"]
+except KeyError:
+    st.error("Error: La clave API de Gemini no está configurada en Streamlit Secrets. "
+             "Por favor, añade 'GOOGLE_API_KEY' a tu archivo .streamlit/secrets.toml "
+             "o configúrala en el panel de control de Streamlit Cloud.")
+    st.stop() # Detiene la ejecución de la aplicación si la clave no está disponible
+
 genai.configure(api_key=API_KEY)
 
 # Inicializar el modelo de Gemini
@@ -113,11 +122,8 @@ def process_google_sheet_url(url):
 
 def get_ai_response(user_message):
     """Envía el mensaje del usuario y el contexto de datos a Gemini y obtiene una respuesta."""
-    # Verificar si la API_KEY está configurada
-    if not API_KEY:
-        st.error("Error: La clave API de Gemini no está configurada. Por favor, configura la variable GOOGLE_API_KEY o reemplaza la cadena vacía en el código.")
-        return "Lo siento, no puedo responder. La clave API de Gemini no está configurada."
-
+    # La clave API ya se verifica al inicio de la aplicación
+    
     full_prompt = user_message
 
     # Añadir contexto de datos si está disponible
@@ -226,6 +232,11 @@ if user_input:
 if st.session_state.excel_data is not None:
     st.subheader("Vista Previa de Datos Excel Cargados")
     st.dataframe(st.session_state.excel_data.head()) # Mostrar las primeras filas
+
+if st.session_state.google_sheet_url is not None:
+    st.subheader("Detalles de Google Sheet Vinculado")
+    st.success(f"Google Sheet vinculado: {st.session_state.google_sheet_url}")
+    st.info("Nota: La integración real de Google Sheets requeriría autenticación.")
 
 if st.session_state.google_sheet_url is not None:
     st.subheader("Detalles de Google Sheet Vinculado")
