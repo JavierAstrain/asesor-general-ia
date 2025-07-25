@@ -7,7 +7,7 @@ import io # Para manejar archivos en memoria
 # La clave API se inyectará en tiempo de ejecución en el entorno de Canvas.
 # Si ejecutas esto localmente, necesitarás establecer la variable de entorno
 # GOOGLE_API_KEY o reemplazar "" con tu clave API.
-API_KEY = "" # Reemplaza con tu clave API si no estás en Canvas
+API_KEY = "AIzaSyAHdymFzn5ptafMzgXTIXPaUEMtZmruN30" # Reemplaza con tu clave API si no estás en Canvas
 genai.configure(api_key=API_KEY)
 
 # Inicializar el modelo de Gemini
