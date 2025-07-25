@@ -2,17 +2,13 @@ import streamlit as st
 import pandas as pd
 import google.generativeai as genai
 import io # Para manejar archivos en memoria
+import json # Para manejar la salida de las funciones
 
 # --- Configuración de Autenticación ---
 CORRECT_USERNAME = "javi"
 CORRECT_PASSWORD = "javi"
 
 # Configuración de la API de Gemini
-# La clave API se inyectará en tiempo de ejecución en el entorno de Canvas.
-# Si ejecutas esto localmente, necesitarás establecer la variable de entorno
-# GOOGLE_API_KEY o reemplazar "" con tu clave API.
-# Ahora se lee desde st.secrets, que puede ser configurado localmente en .streamlit/secrets.toml
-# o en el panel de control de Streamlit Cloud.
 try:
     API_KEY = st.secrets["GOOGLE_API_KEY"]
 except KeyError:
@@ -23,13 +19,14 @@ except KeyError:
 
 genai.configure(api_key=API_KEY)
 
-# Inicializar el modelo de Gemini
+# Inicializar el modelo de Gemini (ahora con herramientas)
+# El modelo se inicializará con las herramientas definidas más abajo
 model = genai.GenerativeModel('gemini-2.0-flash')
 
 # --- Configuración de Streamlit ---
 st.set_page_config(
-    page_title="Gerente General IA", # Título actualizado
-    page_icon="🤖", # Icono actualizado para reflejar un bot más general
+    page_title="Gerente General IA",
+    page_icon="🤖",
     layout="wide"
 )
 
@@ -56,7 +53,6 @@ st.markdown("""
     .stButton>button:hover {
         background-color: #1e40af;
     }
-    /* Estilos de mensajes de chat (mantener para consistencia, aunque no se usen directamente en el flujo) */
     .chat-message-user {
         background-color: #3b82f6; /* blue-500 */
         color: white;
@@ -128,18 +124,125 @@ def process_google_sheet_url(url):
     st.session_state.chat_history.append({"role": "system", "content": f"URL de Google Sheet '{url}' guardada. En una aplicación real, se conectaría a esta hoja."})
     return True
 
+# --- Herramientas para la IA (Function Calling) ---
+
+@genai.tool
+def consultar_datos_tabla(
+    query_type: str,
+    column_name: str = None,
+    filter_column: str = None,
+    filter_value: str = None,
+    value_column: str = None,
+    group_by_column: str = None
+) -> str:
+    """
+    Realiza operaciones de consulta y cálculo sobre la planilla de datos cargada.
+    
+    Args:
+        query_type (str): El tipo de consulta a realizar.
+                          Valores posibles: "sum", "average", "count", "unique", "percentage", "filter_sum", "filter_average", "filter_count", "group_by_sum", "group_by_count", "group_by_average".
+        column_name (str, opcional): El nombre de la columna sobre la que operar. Requerido para "sum", "average", "count", "unique".
+        filter_column (str, opcional): El nombre de la columna para aplicar un filtro. Requerido para "filter_sum", "filter_average", "filter_count".
+        filter_value (str, opcional): El valor por el que filtrar en 'filter_column'. Requerido para "filter_sum", "filter_average", "filter_count".
+        value_column (str, opcional): El nombre de la columna para sumar/promediar después de filtrar. Requerido para "filter_sum", "filter_average".
+        group_by_column (str, opcional): El nombre de la columna para agrupar. Requerido para "group_by_sum", "group_by_count", "group_by_average".
+    
+    Returns:
+        str: Un JSON string con el resultado de la consulta o un mensaje de error.
+    """
+    df = st.session_state.excel_data
+    if df is None:
+        return json.dumps({"error": "No hay datos de Excel cargados para consultar."})
+
+    # Convertir nombres de columnas a minúsculas para una coincidencia flexible
+    df.columns = df.columns.str.strip() # Limpiar espacios en blanco
+    df.columns = df.columns.str.lower()
+    
+    # Asegurarse de que los nombres de columnas en los argumentos también sean minúsculas
+    if column_name: column_name = column_name.lower()
+    if filter_column: filter_column = filter_column.lower()
+    if value_column: value_column = value_column.lower()
+    if group_by_column: group_by_column = group_by_column.lower()
+
+    # Validar que las columnas existan
+    if column_name and column_name not in df.columns:
+        return json.dumps({"error": f"Columna '{column_name}' no encontrada en los datos."})
+    if filter_column and filter_column not in df.columns:
+        return json.dumps({"error": f"Columna de filtro '{filter_column}' no encontrada en los datos."})
+    if value_column and value_column not in df.columns:
+        return json.dumps({"error": f"Columna de valor '{value_column}' no encontrada en los datos."})
+    if group_by_column and group_by_column not in df.columns:
+        return json.dumps({"error": f"Columna de agrupación '{group_by_column}' no encontrada en los datos."})
+
+
+    try:
+        if query_type == "sum":
+            result = df[column_name].sum()
+            return json.dumps({"result": result, "unit": "sum"})
+        elif query_type == "average":
+            result = df[column_name].mean()
+            return json.dumps({"result": result, "unit": "average"})
+        elif query_type == "count":
+            result = df[column_name].count()
+            return json.dumps({"result": result, "unit": "count"})
+        elif query_type == "unique":
+            result = df[column_name].nunique()
+            return json.dumps({"result": result, "unit": "unique_count"})
+        elif query_type == "filter_sum":
+            filtered_df = df[df[filter_column] == filter_value]
+            result = filtered_df[value_column].sum()
+            return json.dumps({"result": result, "unit": "sum", "filter": {filter_column: filter_value}})
+        elif query_type == "filter_average":
+            filtered_df = df[df[filter_column] == filter_value]
+            result = filtered_df[value_column].mean()
+            return json.dumps({"result": result, "unit": "average", "filter": {filter_column: filter_value}})
+        elif query_type == "filter_count":
+            filtered_df = df[df[filter_column] == filter_value]
+            result = filtered_df[value_column].count() # O len(filtered_df) si es el conteo de filas
+            return json.dumps({"result": result, "unit": "count", "filter": {filter_column: filter_value}})
+        elif query_type == "percentage":
+            # Requiere column_name para el numerador y denominador (o un filtro)
+            # Para la pregunta "porcentaje de tipo de cliente liviano en relacion a monto facturado"
+            # Asumimos que 'Tipo Vehículo' y 'Monto Facturado' son las columnas relevantes
+            if filter_column and value_column:
+                total_value = df[value_column].sum()
+                filtered_df = df[df[filter_column] == filter_value]
+                filtered_value = filtered_df[value_column].sum()
+                if total_value == 0:
+                    return json.dumps({"result": 0, "unit": "percentage", "details": "El monto total facturado es cero, por lo que el porcentaje es 0%."})
+                percentage = (filtered_value / total_value) * 100
+                return json.dumps({"result": percentage, "unit": "percentage", "filter": {filter_column: filter_value}})
+            else:
+                 return json.dumps({"error": "Para 'percentage', se requieren 'filter_column', 'filter_value' y 'value_column'."})
+        elif query_type == "group_by_sum":
+            grouped_result = df.groupby(group_by_column)[value_column].sum().to_dict()
+            return json.dumps({"result": grouped_result, "unit": "group_by_sum", "group_by": group_by_column})
+        elif query_type == "group_by_count":
+            grouped_result = df.groupby(group_by_column)[value_column].count().to_dict()
+            return json.dumps({"result": grouped_result, "unit": "group_by_count", "group_by": group_by_column})
+        elif query_type == "group_by_average":
+            grouped_result = df.groupby(group_by_column)[value_column].mean().to_dict()
+            return json.dumps({"result": grouped_result, "unit": "group_by_average", "group_by": group_by_column})
+        else:
+            return json.dumps({"error": f"Tipo de consulta '{query_type}' no soportado."})
+    except KeyError as e:
+        return json.dumps({"error": f"Columna no encontrada: {e}. Por favor, verifica los nombres de las columnas en tu planilla."})
+    except Exception as e:
+        return json.dumps({"error": f"Error al ejecutar la consulta: {e}"})
+
+
 # --- Interacción con la IA ---
 
 def get_ai_response(user_message):
     """Envía el mensaje del usuario y el contexto de datos a Gemini y obtiene una respuesta."""
     # La clave API ya se verifica al inicio de la aplicación
     
-    full_prompt = user_message
-
+    # Prepara el historial para Gemini, incluyendo el contexto de la planilla
+    gemini_chat_history = []
+    
     # Añadir contexto de datos si está disponible
     data_context = ""
     if st.session_state.excel_data is not None:
-        # Generar un resumen de la estructura y una muestra de los datos
         buffer = io.StringIO()
         st.session_state.excel_data.info(buf=buffer, verbose=True)
         data_info = buffer.getvalue()
@@ -153,37 +256,56 @@ def get_ai_response(user_message):
         data_context += st.session_state.excel_data.tail().to_markdown(index=False)
         data_context += "\n\n"
         data_context += "Soy un Gerente General IA. Mi objetivo es ayudarte a consultar información, hacer cálculos y dar recomendaciones sobre tu negocio, basándome en esta planilla. "
-        data_context += "Sin embargo, ten en cuenta lo siguiente:\n"
-        data_context += "- Solo tengo acceso a la *estructura* y a una *muestra* de los datos que te he proporcionado. No puedo ver la planilla completa directamente.\n"
-        data_context += "- **No puedo ejecutar código Python ni realizar cálculos directamente sobre la planilla completa.**\n"
-        data_context += "- Si necesitas un cálculo específico (ej. suma total, promedio, conteo) o un análisis que requiera procesar toda la planilla, por favor, **pídeme que te genere el código Python (usando la librería `pandas`)** que podrías ejecutar tú mismo para obtener esa información. Luego, si me proporcionas los resultados, puedo interpretarlos.\n"
-        data_context += "- Puedo responder preguntas conceptuales, dar recomendaciones estratégicas y analizar tendencias generales basándome en la estructura de tus datos y en mi conocimiento general de negocio (finanzas, marketing, operaciones, RRHH, etc.).\n"
-        data_context += "Por favor, sé específico en tus preguntas y, si es un cálculo, pide el código."
+        data_context += "Tengo acceso a una herramienta llamada `consultar_datos_tabla` que me permite realizar operaciones sobre la planilla completa. "
+        data_context += "Cuando me pidas un cálculo o una consulta de datos, intentaré usar esta herramienta y te daré la respuesta directamente. "
+        data_context += "Si no puedo realizar la operación con la herramienta, te lo indicaré. "
+        data_context += "También puedo responder preguntas conceptuales y dar recomendaciones estratégicas basadas en la estructura de tus datos y en mi conocimiento general de negocio (finanzas, marketing, operaciones, RRHH, etc.).\n"
+        data_context += "Por favor, sé específico en tus preguntas sobre los datos."
 
     if st.session_state.google_sheet_url is not None:
         data_context += f"\n\nEl usuario ha vinculado la siguiente URL de Google Sheet: {st.session_state.google_sheet_url}. "
-        data_context += "Considera que esta es una fuente de datos adicional, pero aplican las mismas limitaciones de acceso y cálculo directo."
+        data_context += "Considera que esta es una fuente de datos adicional, pero las herramientas solo operan sobre la planilla Excel actualmente."
 
+    # Añadir el contexto de datos como un mensaje del sistema al inicio del chat
     if data_context:
-        full_prompt = f"{data_context}\n\nConsulta del usuario: {user_message}"
+        gemini_chat_history.append({"role": "user", "parts": [{"text": data_context}]})
+        gemini_chat_history.append({"role": "model", "parts": [{"text": "Entendido. Estoy listo para ayudarte con tus datos."}]}) # Confirmación de la IA
 
+    # Añadir el historial de chat existente (limitado)
+    recent_history = st.session_state.chat_history[-10:] # Limitar para evitar exceder el límite de tokens
+    for msg in recent_history:
+        if msg["role"] == "user":
+            gemini_chat_history.append({"role": "user", "parts": [{"text": msg["content"]}]})
+        elif msg["role"] == "ai":
+            gemini_chat_history.append({"role": "model", "parts": [{"text": msg["content"]}]})
+
+    # Iniciar el chat con el historial y las herramientas
+    chat = model.start_chat(history=gemini_chat_history, tools=[consultar_datos_tabla])
+    
     try:
-        # Preparar el historial para Gemini
-        gemini_chat_history = []
-        # Limitar el historial para evitar exceder el límite de tokens
-        # Mantener solo los últimos 10 mensajes (5 pares de usuario/AI)
-        recent_history = st.session_state.chat_history[-10:]
-        for msg in recent_history:
-            if msg["role"] == "user":
-                gemini_chat_history.append({"role": "user", "parts": [{"text": msg["content"]}]})
-            elif msg["role"] == "ai":
-                gemini_chat_history.append({"role": "model", "parts": [{"text": msg["content"]}]})
+        # Enviar el mensaje del usuario
+        response = chat.send_message(user_message)
 
-        # Iniciar el chat con el historial
-        chat = model.start_chat(history=gemini_chat_history)
-        response = chat.send_message(full_prompt)
+        # Verificar si el modelo ha llamado a una función
+        if response.candidates and response.candidates[0].function_calls:
+            function_call = response.candidates[0].function_calls[0]
+            function_name = function_call.name
+            function_args = {k: v for k, v in function_call.args.items()} # Convertir a dict
+            
+            st.info(f"Gerente General IA está ejecutando una función: {function_name} con argumentos {function_args}")
 
-        if response.text:
+            # Ejecutar la función Python correspondiente
+            if function_name == "consultar_datos_tabla":
+                tool_output = consultar_datos_tabla(**function_args)
+                
+                # Enviar el resultado de la función de vuelta al modelo
+                response_after_tool = chat.send_message(
+                    genai.types.ToolOutput(tool_code=tool_output) # Usar ToolOutput
+                )
+                return response_after_tool.text
+            else:
+                return "La IA intentó usar una función desconocida."
+        elif response.text:
             return response.text
         else:
             return "Lo siento, la IA no pudo generar una respuesta significativa."
@@ -192,7 +314,7 @@ def get_ai_response(user_message):
         return "Lo siento, tu consulta fue bloqueada por razones de seguridad. Por favor, intenta con una pregunta diferente."
     except Exception as e:
         st.error(f"Error al obtener respuesta de la IA: {e}")
-        return "Hubo un error al conectar con la IA. Por favor, inténtalo de nuevo."
+        return "Hubo un error al conectar con la IA o al procesar la consulta. Por favor, inténtalo de nuevo."
 
 # --- Lógica de Autenticación ---
 if not st.session_state.logged_in:
@@ -272,7 +394,7 @@ if user_input:
 if st.session_state.excel_data is not None:
     st.subheader("Vista Previa de Datos Excel Cargados")
     st.dataframe(st.session_state.excel_data) # Mostrar el DataFrame completo
-    st.caption("El modelo de IA recibe un resumen de la estructura y una muestra de los datos. Para consultas muy específicas que requieran datos fuera de la muestra o cálculos directos, la IA te proporcionará el código Python necesario.")
+    st.caption("El modelo de IA ahora puede realizar cálculos directos sobre esta planilla utilizando herramientas internas.")
 
 if st.session_state.google_sheet_url is not None:
     st.subheader("Detalles de Google Sheet Vinculado")
@@ -282,8 +404,9 @@ if st.session_state.google_sheet_url is not None:
 # --- Registro de Preguntas del Usuario (Nuevo) ---
 st.subheader("Historial de Preguntas")
 if any(msg["role"] == "user" for msg in st.session_state.chat_history):
-    for i, message in enumerate(st.session_state.chat_history):
-        if message["role"] == "user":
-            st.markdown(f"- **Pregunta {i+1}:** {message['content']}")
+    # Filtrar solo los mensajes del usuario para el historial
+    user_questions = [msg["content"] for msg in st.session_state.chat_history if msg["role"] == "user"]
+    for i, question in enumerate(user_questions):
+        st.markdown(f"- **Pregunta {i+1}:** {question}")
 else:
     st.info("Aún no has realizado ninguna pregunta.")
