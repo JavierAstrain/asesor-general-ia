@@ -135,8 +135,11 @@ def get_ai_response(user_message):
     # Añadir contexto de datos si está disponible
     data_context = ""
     if st.session_state.excel_data is not None:
-        data_context += "\n\nDatos de Excel cargados (primeras 5 filas):\n"
-        data_context += st.session_state.excel_data.head().to_markdown(index=False)
+        # ¡IMPORTANTE! Enviar el DataFrame completo puede exceder los límites de tokens del modelo
+        # para archivos Excel grandes. Considera técnicas de RAG o de llamada a funciones
+        # para escenarios de producción con grandes volúmenes de datos.
+        data_context += "\n\nDatos de Excel cargados (tabla completa):\n"
+        data_context += st.session_state.excel_data.to_markdown(index=False) # Ahora envía el DataFrame completo
         data_context += "\n\n"
 
     if st.session_state.google_sheet_url is not None:
@@ -253,7 +256,9 @@ if user_input:
 # Vista previa de datos cargados (debajo del chat input)
 if st.session_state.excel_data is not None:
     st.subheader("Vista Previa de Datos Excel Cargados")
-    st.dataframe(st.session_state.excel_data.head()) # Mostrar las primeras filas
+    st.dataframe(st.session_state.excel_data) # Mostrar el DataFrame completo
+    st.caption("Nota: El modelo de IA recibe el DataFrame completo para la consulta, pero ten en cuenta los límites de tokens para archivos muy grandes.")
+
 
 if st.session_state.google_sheet_url is not None:
     st.subheader("Detalles de Google Sheet Vinculado")
