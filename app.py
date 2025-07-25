@@ -89,7 +89,6 @@ def process_excel_file(uploaded_file):
     """Procesa un archivo Excel cargado y devuelve un DataFrame."""
     try:
         df = pd.read_excel(uploaded_file)
-        # Aquí podrías realizar limpieza, validación o selección de columnas
         st.session_state.excel_data = df
         st.session_state.chat_history.append({"role": "system", "content": f"Archivo Excel '{uploaded_file.name}' cargado y procesado. Ahora puedes hacer preguntas sobre los datos."})
         return True
@@ -105,9 +104,7 @@ def process_google_sheet_url(url):
     if not url.strip():
         st.session_state.chat_history.append({"role": "system", "content": "Por favor, introduce una URL de Google Sheet válida."})
         return False
-    
-    # Aquí iría la lógica real para acceder a Google Sheets.
-    # Por ahora, solo almacenamos la URL y simulamos el éxito.
+
     st.session_state.google_sheet_url = url
     st.session_state.chat_history.append({"role": "system", "content": f"URL de Google Sheet '{url}' guardada. En una aplicación real, se conectaría a esta hoja."})
     return True
@@ -124,10 +121,10 @@ def get_ai_response(user_message):
         data_context += "\n\nDatos de Excel cargados (primeras 5 filas):\n"
         data_context += st.session_state.excel_data.head().to_markdown(index=False)
         data_context += "\n\n"
-    
+
     if st.session_state.google_sheet_url is not None:
         data_context += f"\n\nEl usuario ha vinculado la siguiente URL de Google Sheet: {st.session_state.google_sheet_url}. "
-        data_context += "Considera que esta es una fuente de datos adicional." # Aquí podrías añadir un resumen de los datos si los hubieras cargado realmente
+        data_context += "Considera que esta es una fuente de datos adicional."
 
     if data_context:
         full_prompt = f"El siguiente contexto de datos está disponible (si es relevante):{data_context}\n\nConsulta del usuario: {user_message}"
@@ -135,94 +132,94 @@ def get_ai_response(user_message):
     try:
         # Preparar el historial para Gemini
         gemini_chat_history = []
-        for msg in st.session_state.chat_history:
+        # Limitar el historial para evitar exceder el límite de tokens
+        # Mantener solo los últimos 10 mensajes (5 pares de usuario/AI)
+        recent_history = st.session_state.chat_history[-10:]
+        for msg in recent_history:
             if msg["role"] == "user":
                 gemini_chat_history.append({"role": "user", "parts": [{"text": msg["content"]}]})
             elif msg["role"] == "ai":
                 gemini_chat_history.append({"role": "model", "parts": [{"text": msg["content"]}]})
-        
-        # Añadir el mensaje actual del usuario al historial para la llamada
-        gemini_chat_history.append({"role": "user", "parts": [{"text": full_prompt}]})
 
-        # Usar el modelo de chat para mantener el contexto
-        chat = model.start_chat(history=gemini_chat_history[:-1]) # No incluir el último mensaje del usuario en el historial inicial del chat
+        # Iniciar el chat con el historial
+        chat = model.start_chat(history=gemini_chat_history)
         response = chat.send_message(full_prompt)
-        
-        return response.text
+
+        if response.text:
+            return response.text
+        else:
+            return "Lo siento, la IA no pudo generar una respuesta significativa."
     except Exception as e:
         st.error(f"Error al obtener respuesta de la IA: {e}")
-        return "Lo siento, no pude generar una respuesta. Por favor, inténtalo de nuevo."
+        return "Hubo un error al conectar con la IA. Por favor, inténtalo de nuevo."
 
 # --- Diseño de la aplicación Streamlit ---
 
 st.title("💰 Asesor Financiero con IA")
 
-# Contenedor principal con dos columnas
-col1, col2 = st.columns([0.7, 0.3]) # Chat más grande que la barra lateral de datos
-
-with col2: # Columna derecha para carga de datos
-    st.header("Cargar Datos Financieros")
-
+# Sección de Carga de Datos en un expander
+with st.expander("Cargar Datos Financieros"):
     st.subheader("Archivo Excel (.xlsx, .xls)")
     uploaded_file = st.file_uploader("Sube tu archivo Excel", type=["xlsx", "xls"], key="excel_uploader")
     if uploaded_file is not None:
-        if st.button("Procesar Excel"):
+        if st.button("Procesar Excel", key="process_excel_btn"):
             with st.spinner("Procesando archivo Excel..."):
                 process_excel_file(uploaded_file)
-    
-    if st.session_state.excel_data is not None:
-        st.success(f"Excel cargado: {uploaded_file.name}")
-        st.dataframe(st.session_state.excel_data.head()) # Mostrar las primeras filas
+            st.experimental_rerun() # Forzar re-render para mostrar el mensaje del sistema
 
     st.markdown("---")
 
     st.subheader("Vincular Google Sheet (URL)")
     google_sheet_input = st.text_input("Introduce la URL de tu Google Sheet", key="google_sheet_url_input")
-    if st.button("Vincular Hoja"):
+    if st.button("Vincular Hoja", key="link_sheet_btn"):
         with st.spinner("Vinculando Google Sheet..."):
             process_google_sheet_url(google_sheet_input)
-    
-    if st.session_state.google_sheet_url is not None:
-        st.success(f"Google Sheet vinculado: {st.session_state.google_sheet_url}")
-        st.info("Nota: La integración real de Google Sheets requeriría autenticación.")
+        st.experimental_rerun() # Forzar re-render para mostrar el mensaje del sistema
 
     st.markdown("---")
 
-    if st.button("Reiniciar Datos Cargados", help="Borra los datos de Excel y la URL de Google Sheet de la sesión."):
+    if st.button("Reiniciar Datos Cargados", help="Borra los datos de Excel y la URL de Google Sheet de la sesión.", key="reset_data_btn"):
         st.session_state.excel_data = None
         st.session_state.google_sheet_url = None
         st.session_state.chat_history.append({"role": "system", "content": "Datos de carga reiniciados."})
         st.experimental_rerun() # Forzar un re-render para limpiar los widgets
 
-with col1: # Columna izquierda para el chat
-    st.header("Chat con tu Asesor AI")
+# Área de visualización del chat
+chat_placeholder = st.container()
+with chat_placeholder:
+    if not st.session_state.chat_history:
+        st.markdown("""
+            <div class="chat-message-system">
+                ¡Hola! Soy tu Asesor Financiero AI. ¿En qué puedo ayudarte hoy con tus finanzas?
+                <br/>
+                Puedes empezar preguntando sobre inversiones, presupuestos o cargando tus datos en la sección superior.
+            </div>
+        """, unsafe_allow_html=True)
 
-    # Área de visualización del chat
-    chat_placeholder = st.container()
-    with chat_placeholder:
-        if not st.session_state.chat_history:
-            st.markdown("""
-                <div class="chat-message-system">
-                    ¡Hola! Soy tu Asesor Financiero AI. ¿En qué puedo ayudarte hoy con tus finanzas?
-                    <br/>
-                    Puedes empezar preguntando sobre inversiones, presupuestos o cargando tus datos en la sección de la derecha.
-                </div>
-            """, unsafe_allow_html=True)
-        
-        for message in st.session_state.chat_history:
-            if message["role"] == "user":
-                st.markdown(f'<div class="chat-message-user">{message["content"]}</div>', unsafe_allow_html=True)
-            elif message["role"] == "ai":
-                st.markdown(f'<div class="chat-message-ai">{message["content"]}</div>', unsafe_allow_html=True)
-            elif message["role"] == "system":
-                st.markdown(f'<div class="chat-message-system">{message["content"]}</div>', unsafe_allow_html=True)
-    
-    # Entrada de texto para el chat
-    user_input = st.chat_input("Escribe tu pregunta o comentario...", key="user_input_chat")
+    for message in st.session_state.chat_history:
+        if message["role"] == "user":
+            st.markdown(f'<div class="chat-message-user">{message["content"]}</div>', unsafe_allow_html=True)
+        elif message["role"] == "ai":
+            st.markdown(f'<div class="chat-message-ai">{message["content"]}</div>', unsafe_allow_html=True)
+        elif message["role"] == "system":
+            st.markdown(f'<div class="chat-message-system">{message["content"]}</div>', unsafe_allow_html=True)
 
-    if user_input:
-        st.session_state.chat_history.append({"role": "user", "content": user_input})
-        with st.spinner("Pensando..."):
-            ai_response = get_ai_response(user_input)
-            st.session_state.chat_history.append({"role": "ai", "content": ai_response})
-        st.experimental_rerun() # Forzar un re-render para mostrar el nuevo mensaje
+# Entrada de texto para el chat
+user_input = st.chat_input("Escribe tu pregunta o comentario...", key="user_input_chat")
+
+if user_input:
+    st.session_state.chat_history.append({"role": "user", "content": user_input})
+    with st.spinner("Pensando..."):
+        ai_response = get_ai_response(user_input)
+        st.session_state.chat_history.append({"role": "ai", "content": ai_response})
+    st.experimental_rerun() # Forzar un re-render para mostrar el nuevo mensaje
+
+# Vista previa de datos cargados (debajo del chat input)
+if st.session_state.excel_data is not None:
+    st.subheader("Vista Previa de Datos Excel Cargados")
+    st.dataframe(st.session_state.excel_data.head()) # Mostrar las primeras filas
+
+if st.session_state.google_sheet_url is not None:
+    st.subheader("Detalles de Google Sheet Vinculado")
+    st.success(f"Google Sheet vinculado: {st.session_state.google_sheet_url}")
+    st.info("Nota: La integración real de Google Sheets requeriría autenticación.")
