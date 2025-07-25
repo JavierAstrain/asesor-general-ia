@@ -179,7 +179,7 @@ with st.expander("Cargar Datos Financieros"):
         if st.button("Procesar Excel", key="process_excel_btn"):
             with st.spinner("Procesando archivo Excel..."):
                 process_excel_file(uploaded_file)
-            st.experimental_rerun() # Forzar re-render para mostrar el mensaje del sistema
+            st.rerun() # Forzar re-render para mostrar el mensaje del sistema
 
     st.markdown("---")
 
@@ -188,7 +188,7 @@ with st.expander("Cargar Datos Financieros"):
     if st.button("Vincular Hoja", key="link_sheet_btn"):
         with st.spinner("Vinculando Google Sheet..."):
             process_google_sheet_url(google_sheet_input)
-        st.experimental_rerun() # Forzar re-render para mostrar el mensaje del sistema
+        st.rerun() # Forzar re-render para mostrar el mensaje del sistema
 
     st.markdown("---")
 
@@ -196,7 +196,7 @@ with st.expander("Cargar Datos Financieros"):
         st.session_state.excel_data = None
         st.session_state.google_sheet_url = None
         st.session_state.chat_history.append({"role": "system", "content": "Datos de carga reiniciados."})
-        st.experimental_rerun() # Forzar un re-render para limpiar los widgets
+        st.rerun() # Forzar un re-render para limpiar los widgets
 
 # Área de visualización del chat
 chat_placeholder = st.container()
@@ -226,17 +226,12 @@ if user_input:
     with st.spinner("Pensando..."):
         ai_response = get_ai_response(user_input)
         st.session_state.chat_history.append({"role": "ai", "content": ai_response})
-    st.experimental_rerun() # Forzar un re-render para mostrar el nuevo mensaje
+    st.rerun() # Forzar un re-render para mostrar el nuevo mensaje
 
 # Vista previa de datos cargados (debajo del chat input)
 if st.session_state.excel_data is not None:
     st.subheader("Vista Previa de Datos Excel Cargados")
     st.dataframe(st.session_state.excel_data.head()) # Mostrar las primeras filas
-
-if st.session_state.google_sheet_url is not None:
-    st.subheader("Detalles de Google Sheet Vinculado")
-    st.success(f"Google Sheet vinculado: {st.session_state.google_sheet_url}")
-    st.info("Nota: La integración real de Google Sheets requeriría autenticación.")
 
 if st.session_state.google_sheet_url is not None:
     st.subheader("Detalles de Google Sheet Vinculado")
