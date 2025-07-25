@@ -113,6 +113,11 @@ def process_google_sheet_url(url):
 
 def get_ai_response(user_message):
     """Envía el mensaje del usuario y el contexto de datos a Gemini y obtiene una respuesta."""
+    # Verificar si la API_KEY está configurada
+    if not API_KEY:
+        st.error("Error: La clave API de Gemini no está configurada. Por favor, configura la variable GOOGLE_API_KEY o reemplaza la cadena vacía en el código.")
+        return "Lo siento, no puedo responder. La clave API de Gemini no está configurada."
+
     full_prompt = user_message
 
     # Añadir contexto de datos si está disponible
@@ -149,6 +154,9 @@ def get_ai_response(user_message):
             return response.text
         else:
             return "Lo siento, la IA no pudo generar una respuesta significativa."
+    except genai.types.BlockedPromptException as e:
+        st.error(f"Error de seguridad: La consulta fue bloqueada por las políticas de seguridad de la IA. Por favor, reformula tu pregunta. Detalles: {e}")
+        return "Lo siento, tu consulta fue bloqueada por razones de seguridad. Por favor, intenta con una pregunta diferente."
     except Exception as e:
         st.error(f"Error al obtener respuesta de la IA: {e}")
         return "Hubo un error al conectar con la IA. Por favor, inténtalo de nuevo."
