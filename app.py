@@ -56,6 +56,7 @@ st.markdown("""
     .stButton>button:hover {
         background-color: #1e40af;
     }
+    /* Estilos de mensajes de chat (mantener para consistencia, aunque no se usen directamente en el flujo) */
     .chat-message-user {
         background-color: #3b82f6; /* blue-500 */
         color: white;
@@ -97,6 +98,9 @@ if "google_sheet_url" not in st.session_state:
     st.session_state.google_sheet_url = None
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
+if "last_ai_response" not in st.session_state:
+    st.session_state.last_ai_response = "Esperando tu primera pregunta..."
+
 
 # --- Funciones de procesamiento de datos ---
 
@@ -234,14 +238,10 @@ with chat_placeholder:
                 Puedes preguntarme sobre finanzas, marketing, operaciones, recursos humanos y más, basándome en los datos que cargues.
             </div>
         """, unsafe_allow_html=True)
+    else:
+        # Mostrar la última respuesta de la IA aquí
+        st.markdown(f'<div class="chat-message-ai">{st.session_state.last_ai_response}</div>', unsafe_allow_html=True)
 
-    for message in st.session_state.chat_history:
-        if message["role"] == "user":
-            st.markdown(f'<div class="chat-message-user">{message["content"]}</div>', unsafe_allow_html=True)
-        elif message["role"] == "ai":
-            st.markdown(f'<div class="chat-message-ai">{message["content"]}</div>', unsafe_allow_html=True)
-        elif message["role"] == "system":
-            st.markdown(f'<div class="chat-message-system">{message["content"]}</div>', unsafe_allow_html=True)
 
 # Entrada de texto para el chat
 user_input = st.chat_input("Escribe tu pregunta o comentario...", key="user_input_chat")
@@ -250,6 +250,7 @@ if user_input:
     st.session_state.chat_history.append({"role": "user", "content": user_input})
     with st.spinner("Pensando..."):
         ai_response = get_ai_response(user_input)
+        st.session_state.last_ai_response = ai_response # Guardar la última respuesta
         st.session_state.chat_history.append({"role": "ai", "content": ai_response})
     st.rerun() # Forzar un re-render para mostrar el nuevo mensaje
 
@@ -259,8 +260,16 @@ if st.session_state.excel_data is not None:
     st.dataframe(st.session_state.excel_data) # Mostrar el DataFrame completo
     st.caption("Nota: El modelo de IA recibe el DataFrame completo para la consulta, pero ten en cuenta los límites de tokens para archivos muy grandes.")
 
-
 if st.session_state.google_sheet_url is not None:
     st.subheader("Detalles de Google Sheet Vinculado")
     st.success(f"Google Sheet vinculado: {st.session_state.google_sheet_url}")
     st.info("Nota: La integración real de Google Sheets requeriría autenticación.")
+
+# --- Registro de Preguntas del Usuario (Nuevo) ---
+st.subheader("Historial de Preguntas")
+if any(msg["role"] == "user" for msg in st.session_state.chat_history):
+    for i, message in enumerate(st.session_state.chat_history):
+        if message["role"] == "user":
+            st.markdown(f"- **Pregunta {i+1}:** {message['content']}")
+else:
+    st.info("Aún no has realizado ninguna pregunta.")
