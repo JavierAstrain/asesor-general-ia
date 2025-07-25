@@ -3,6 +3,18 @@ import pandas as pd
 import google.generativeai as genai
 import io # Para manejar archivos en memoria
 import json # Para manejar la salida de las funciones
+import sys # Para depuración
+import os # Para depuración
+
+# --- Diagnóstico de la versión de google-generativeai ---
+try:
+    import pkg_resources
+    genai_version = pkg_resources.get_distribution("google-generativeai").version
+    st.sidebar.info(f"Versión de google-generativeai cargada: {genai_version}")
+    if genai_version < '0.6.0':
+        st.sidebar.warning("¡Advertencia! La versión de google-generativeai es anterior a 0.6.0. Por favor, actualiza tu entorno.")
+except Exception as e:
+    st.sidebar.error(f"No se pudo verificar la versión de google-generativeai: {e}")
 
 # --- Configuración de Autenticación ---
 CORRECT_USERNAME = "javi"
@@ -20,13 +32,12 @@ except KeyError:
 genai.configure(api_key=API_KEY)
 
 # Inicializar el modelo de Gemini (ahora con herramientas)
-# El modelo se inicializará con las herramientas definidas más abajo
 model = genai.GenerativeModel('gemini-2.0-flash')
 
 # --- Configuración de Streamlit ---
 st.set_page_config(
-    page_title="Gerente General IA",
-    page_icon="🤖",
+    page_title="Gerente General IA", # Título actualizado
+    page_icon="🤖", # Icono actualizado para reflejar un bot más general
     layout="wide"
 )
 
@@ -53,6 +64,7 @@ st.markdown("""
     .stButton>button:hover {
         background-color: #1e40af;
     }
+    /* Estilos de mensajes de chat (mantener para consistencia, aunque no se usen directamente en el flujo) */
     .chat-message-user {
         background-color: #3b82f6; /* blue-500 */
         color: white;
@@ -371,7 +383,7 @@ with chat_placeholder:
             <div class="chat-message-system">
                 ¡Hola! Soy tu Gerente General IA. ¿En qué puedo ayudarte hoy?
                 <br/>
-                Puedes preguntarme sobre finanzas, marketing, operaciones, recursos humanos y más, basándome en los datos que cargues.
+                Puedes preguntarme sobre finanzas, marketing, operaciones, recursos humanos y más, basándote en los datos que cargues.
             </div>
         """, unsafe_allow_html=True)
     else:
