@@ -144,21 +144,25 @@ def get_ai_response(user_message):
         st.session_state.excel_data.info(buf=buffer, verbose=True)
         data_info = buffer.getvalue()
 
-        data_context += "\n\nEl usuario ha cargado una planilla Excel con la siguiente estructura y una muestra de datos:\n"
-        data_context += "--- Información de la Planilla ---\n"
+        data_context += "\n\nEl usuario ha cargado una planilla Excel. Aquí tienes un resumen de su estructura y una muestra de sus datos:\n"
+        data_context += "--- Información de la Planilla (Columnas y Tipos de Datos) ---\n"
         data_context += data_info
         data_context += "\n--- Primeras 5 filas ---\n"
         data_context += st.session_state.excel_data.head().to_markdown(index=False)
         data_context += "\n--- Últimas 5 filas ---\n"
         data_context += st.session_state.excel_data.tail().to_markdown(index=False)
         data_context += "\n\n"
-        data_context += "Considera que esta es una muestra representativa de la planilla completa. "
-        data_context += "Si necesitas datos específicos o realizar cálculos sobre la planilla completa, por favor, indícalo claramente. "
-        data_context += "Puedo ayudarte a consultar información, hacer cálculos y dar recomendaciones más allá del contexto directo de los datos, actuando como un Gerente General IA."
+        data_context += "Soy un Gerente General IA. Mi objetivo es ayudarte a consultar información, hacer cálculos y dar recomendaciones sobre tu negocio, basándome en esta planilla. "
+        data_context += "Sin embargo, ten en cuenta lo siguiente:\n"
+        data_context += "- Solo tengo acceso a la *estructura* y a una *muestra* de los datos que te he proporcionado. No puedo ver la planilla completa directamente.\n"
+        data_context += "- **No puedo ejecutar código Python ni realizar cálculos directamente sobre la planilla completa.**\n"
+        data_context += "- Si necesitas un cálculo específico (ej. suma total, promedio, conteo) o un análisis que requiera procesar toda la planilla, por favor, **pídeme que te genere el código Python (usando la librería `pandas`)** que podrías ejecutar tú mismo para obtener esa información. Luego, si me proporcionas los resultados, puedo interpretarlos.\n"
+        data_context += "- Puedo responder preguntas conceptuales, dar recomendaciones estratégicas y analizar tendencias generales basándome en la estructura de tus datos y en mi conocimiento general de negocio (finanzas, marketing, operaciones, RRHH, etc.).\n"
+        data_context += "Por favor, sé específico en tus preguntas y, si es un cálculo, pide el código."
 
     if st.session_state.google_sheet_url is not None:
         data_context += f"\n\nEl usuario ha vinculado la siguiente URL de Google Sheet: {st.session_state.google_sheet_url}. "
-        data_context += "Considera que esta es una fuente de datos adicional."
+        data_context += "Considera que esta es una fuente de datos adicional, pero aplican las mismas limitaciones de acceso y cálculo directo."
 
     if data_context:
         full_prompt = f"{data_context}\n\nConsulta del usuario: {user_message}"
@@ -268,7 +272,7 @@ if user_input:
 if st.session_state.excel_data is not None:
     st.subheader("Vista Previa de Datos Excel Cargados")
     st.dataframe(st.session_state.excel_data) # Mostrar el DataFrame completo
-    st.caption("Nota: El modelo de IA recibe un resumen de la estructura y una muestra de los datos. Para consultas muy específicas que requieran datos fuera de la muestra, la IA podría necesitar que especifiques qué información necesitas.")
+    st.caption("El modelo de IA recibe un resumen de la estructura y una muestra de los datos. Para consultas muy específicas que requieran datos fuera de la muestra o cálculos directos, la IA te proporcionará el código Python necesario.")
 
 if st.session_state.google_sheet_url is not None:
     st.subheader("Detalles de Google Sheet Vinculado")
